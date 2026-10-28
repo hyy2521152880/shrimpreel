@@ -16,7 +16,7 @@ const EXCLUDED_FAILURES = ['admin_failed', 'content_removed']
 
 // 视频服务商账户问题（没配密钥、密钥失效、余额或月度额度不足）：重试没用，要站长去服务商后台处理。
 // 任务已失败退积分，但之后的任务会一直失败，所以出现 1 个就告警，不等失败率
-export const PROVIDER_ACCOUNT_ERRORS = ['provider_not_configured', 'YIR_UNAUTHORIZED', 'YIR_INSUFFICIENT_BALANCE', 'YIR_SPEND_LIMIT_EXCEEDED', 'nanoapi_invalid_api_key', 'nanoapi_insufficient_balance', 'nanoapi_account_suspended']
+export const PROVIDER_ACCOUNT_ERRORS = ['provider_not_configured', 'kie_401', 'kie_402', 'kie_403', 'kie_433', 'YIR_UNAUTHORIZED', 'YIR_INSUFFICIENT_BALANCE', 'YIR_SPEND_LIMIT_EXCEEDED', 'nanoapi_invalid_api_key', 'nanoapi_insufficient_balance', 'nanoapi_account_suspended']
 
 export const ALERT_RULES = {
   // 最近 1 小时完成的任务里失败 ≥ 3 个且占比 ≥ 30%（零星失败、大流量下的个别失败不报）

@@ -1,5 +1,6 @@
 import { ApiError, isProduction } from '../util'
 import { createFalProvider } from './fal'
+import { createKieProvider } from './kie'
 import { createNanoapiProvider } from './nanoapi'
 import { createYirProvider } from './yir'
 import type { VideoProvider } from './types'
@@ -25,6 +26,7 @@ function createMockProvider(): VideoProvider {
 }
 
 export function activeVideoProviderId(env: Env): VideoProvider['id'] {
+  if (env.VIDEO_PROVIDER === 'kie') return 'kie'
   if (env.VIDEO_PROVIDER === 'fal') return 'fal'
   if (env.VIDEO_PROVIDER === 'yir') return 'yir'
   if (env.VIDEO_PROVIDER === 'nanoapi') return 'nanoapi'
@@ -33,6 +35,7 @@ export function activeVideoProviderId(env: Env): VideoProvider['id'] {
 }
 
 export function getVideoProvider(env: Env, id: string = activeVideoProviderId(env)): VideoProvider {
+  if (id === 'kie') return createKieProvider(env)
   if (id === 'fal') return createFalProvider(env)
   if (id === 'yir') return createYirProvider(env)
   if (id === 'nanoapi') return createNanoapiProvider(env)

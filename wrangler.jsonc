@@ -17,7 +17,7 @@
     "SITE_URL": "http://localhost:3000",
     // waffo | dodo | stripe | mock（mock 只允许非 production）
     "PAYMENT_PROVIDER": "mock",
-    // fal | yir | nanoapi | mock（mock 只允许非 production）
+    // kie | fal | yir | nanoapi | mock（mock 只允许非 production；site:new 默认 kie）
     "VIDEO_PROVIDER": "mock",
     // 管理员邮箱（逗号分隔）：登录即为管理员，同时接收举报、留言提醒和系统告警
     "ADMIN_EMAILS": "admin@example.com",

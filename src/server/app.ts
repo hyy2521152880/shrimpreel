@@ -21,7 +21,8 @@ import { processPaymentEvent } from './orders'
 import { reconcileOrder, reconcilePendingOrders } from './reconcile'
 import { normalizeCode, redeemCode } from './redeem'
 import { REFERRAL_COOKIE, ensureReferralCode, normalizeReferralCode, referralSummary, requestReferral } from './referrals'
-import { assertCheckoutOpen, assertOpen, dailyCapGuard, generationsToday, getSettings, publicNotice, referralActive } from './settings'
+import { assertCheckoutOpen, assertOpen, dailyCapGuard, generationsToday, getSettings, kieConfigFor, publicNotice, referralActive } from './settings'
+import { kieConfigProblems, kieRecipe } from '#/config/kie'
 import { seoRoutes } from './seo'
 import { assertShareable, findSharedGeneration, loadShare, readSharePoster, startShare, stopShare } from './shares'
 import { notifyContactMessage, runTakedownReminders } from './notifications'
@@ -46,6 +47,7 @@ import { turnstileSiteKey, verifyTurnstile } from './turnstile'
 import type { AppContext, GenerationRow, OrderRow, UploadRow, UserRow } from './types'
 import { ApiError, constantTimeEqual, createId, isCheckConstraintError, isProduction, nowIso, randomToken, sha256Hex } from './util'
 import { activeVideoProviderId } from './video'
+import { kieConfigFromMeta, taskIdValid, verifyKieRecovery } from './video/kie'
 
 const MAX_ACTIVE_JOBS_PER_USER = 3
 
@@ -309,7 +311,16 @@ app.post('/api/generations', async (c) => {
 
   const providerId = activeVideoProviderId(c.env)
   const mockOutcome = providerId === 'mock' && (body.mockOutcome === 'fail' || body.mockOutcome === 'hang') ? body.mockOutcome : null
-  const meta = mockOutcome ? JSON.stringify({ mockOutcome }) : null
+  let meta = mockOutcome ? JSON.stringify({ mockOutcome }) : null
+  if (providerId === 'kie') {
+    const config = kieConfigFor(settings)
+    if (!c.env.KIE_API_KEY?.trim() || kieConfigProblems(config).length || style.scene) throw new ApiError(503, 'video_not_configured')
+    const recipe = kieRecipe(config.model)!
+    if (upload.size_bytes > recipe.imageMaxBytes) throw new ApiError(400, 'kie_image_too_large')
+    const source = await c.env.MEDIA.head(`templates/${style.sources[duration.id]}`)
+    if (!source || source.size > recipe.videoMaxBytes) throw new ApiError(503, 'video_not_configured')
+    meta = JSON.stringify({ kie: config, durationSeconds: duration.seconds })
+  }
   const id = createId('gen')
   const now = nowIso()
   try {
@@ -798,12 +809,26 @@ app.post('/api/webhooks/stripe', async (c) => {
 
 // 视频服务商完成回调（fal、yir、nanoapi）：只当作“立即轮询”的信号，真实结果由 jobs.ts 用 API key 拉取，
 // 所以只校验地址里的任务 token，不验 yir 的签名头；nanoapi 的回调不带签名，同样只靠地址里的 token
-for (const provider of ['fal', 'yir', 'nanoapi']) {
+for (const provider of ['fal', 'yir', 'nanoapi', 'kie']) {
   app.post(`/api/webhooks/${provider}`, async (c) => {
     const generationId = c.req.query('gen') ?? ''
     const token = c.req.query('token') ?? ''
     if (!generationId || !constantTimeEqual(token, await jobToken(c.env, generationId))) {
       throw new WebhookVerificationError(`invalid ${provider} job token`)
+    }
+    const generation = await c.env.DB.prepare('SELECT * FROM generations WHERE id = ?').bind(generationId).first<GenerationRow>()
+    if (!generation || generation.provider !== provider || generation.status !== 'processing') return c.json({ received: true })
+    if (provider === 'kie' && !generation.provider_request_id) {
+      const body = await readJson<{ data: { taskId?: unknown } }>(c)
+      const taskId = body.data?.taskId
+      if (!taskIdValid(taskId)) throw new ApiError(400, 'invalid_task')
+      const callback = new URL('/api/webhooks/kie', c.env.SITE_URL)
+      callback.searchParams.set('gen', generationId)
+      callback.searchParams.set('token', token)
+      const config = kieConfigFromMeta(JSON.parse(generation.provider_meta || '{}'))
+      if (!await verifyKieRecovery(c.env, taskId, callback.toString(), config.model)) throw new ApiError(400, 'invalid_task')
+      await c.env.DB.prepare(`UPDATE generations SET provider_request_id = ?, started_at = ?, updated_at = ? WHERE id = ? AND provider = 'kie' AND status = 'processing' AND provider_request_id IS NULL`)
+        .bind(taskId, nowIso(), nowIso(), generationId).run()
     }
     await enqueueJob(c.env, { kind: 'poll', generationId })
     return c.json({ received: true })

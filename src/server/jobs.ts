@@ -9,6 +9,7 @@ import { grantDueSubscriptions } from './subscriptions'
 import { nowIso } from './util'
 import { getVideoProvider } from './video'
 import { VideoProviderError } from './video/types'
+import { KieSubmissionUnknown } from './video/kie'
 
 const JOB_TIMEOUT_MINUTES = 45
 // 成片大小上限：带 Content-Length 时直接流式写入 R2，不占 Worker 内存；没带时只能边读边缓存，上限更低（Worker 内存 128 MB）
@@ -59,7 +60,7 @@ export async function storeOutputFromUrl(
   await env.MEDIA.put(key, bytes, { httpMetadata })
   return true
 }
-const POLL_DELAY_SECONDS: Record<string, number> = { mock: 2, fal: 20, yir: 20, nanoapi: 30 }
+const POLL_DELAY_SECONDS: Record<string, number> = { mock: 2, fal: 20, yir: 20, nanoapi: 30, kie: 20 }
 
 export async function enqueueJob(env: Env, message: VideoJobMessage, delaySeconds = 0) {
   await env.VIDEO_QUEUE.send(message, delaySeconds > 0 ? { delaySeconds } : undefined)
@@ -126,6 +127,7 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
 
   const provider = getVideoProvider(env, generation.provider)
   const baseMeta = parseMeta(generation.provider_meta)
+  let accepted = false
 
   // 签名在 try 里：生产环境 SESSION_SECRET 配错时会抛错，要和提交失败一样放回 queued，交给队列重试和死信退款
   try {
@@ -144,6 +146,7 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
       meta: baseMeta,
     })
     const now = nowIso()
+    accepted = true
     await env.DB.prepare(
       `UPDATE generations SET provider_request_id = ?, provider_meta = ?, started_at = ?, updated_at = ? WHERE id = ?`,
     )
@@ -151,6 +154,12 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
       .run()
     await enqueueJob(env, { kind: 'poll', generationId: generation.id }, POLL_DELAY_SECONDS[provider.id])
   } catch (error) {
+    // KIE 没有已核实的创建幂等键。结果不确定时保持 processing，等签名回调恢复或超时退积分。
+    // 拿到 task id 后落库/排轮询失败也不能重新生成；已有 task id 会由 Cron 恢复轮询。
+    if (accepted || error instanceof KieSubmissionUnknown || (provider.id === 'kie' && !(error instanceof VideoProviderError))) {
+      console.error('video submission requires reconciliation', { generationId: generation.id, provider: provider.id })
+      return
+    }
     if (error instanceof VideoProviderError && !error.retryable) {
       await failGeneration(env, generation.id, error.code, error.message)
       return
@@ -288,6 +297,9 @@ export async function runScheduledMaintenance(env: Env) {
       await enqueueJob(env, { kind: 'submit', generationId: generation.id })
     } else if (generation.provider_request_id) {
       await enqueueJob(env, { kind: 'poll', generationId: generation.id })
+    } else if (generation.provider === 'kie') {
+      // 请求可能已被计费：等待带任务 token 的回调或 45 分钟超时，不自动重提。
+      continue
     } else if (generation.attempts < 3) {
       // 抢占后、拿到 request id 前 Worker 中断：放回队列重新提交
       await db

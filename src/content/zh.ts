@@ -487,6 +487,8 @@ export function zh(s: S): Content {
       length_required: '浏览器上传文件的方式不受支持，请换个浏览器重试。',
       unsupported_file_type: '请上传 JPG、PNG 或 WebP 图片。',
       invalid_upload: '请重新上传照片。',
+      kie_image_too_large: '这个玩法需要较小的照片，请上传 5 MB 以下的图片。',
+      video_not_configured: '这个视频玩法暂时不可用，请稍后再试。',
       invalid_style: '这个舞蹈风格暂不可用，请换一个。',
       queue_unavailable: '生成队列繁忙，积分已退回，请重试。',
       payment_not_configured: '支付暂不可用。',

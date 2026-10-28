@@ -517,6 +517,8 @@ export function en(s: S) {
       length_required: 'Your browser sent the file in a way we can’t accept. Please try again in another browser.',
       unsupported_file_type: 'Please upload a JPG, PNG or WebP image.',
       invalid_upload: 'Please upload the photo again.',
+      kie_image_too_large: 'This video style needs a smaller photo. Please upload a photo under 5 MB.',
+      video_not_configured: 'This video style is temporarily unavailable. Please try again later.',
       invalid_style: 'That dance style isn’t available. Please pick another one.',
       queue_unavailable: 'Our render queue is busy. Your credits were returned; please try again.',
       payment_not_configured: 'Payments are not available right now.',

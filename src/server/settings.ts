@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import { LOCALES, LOCALE_META, site, type Locale } from '#/config/site'
+import { KIE_RECIPES, kieConfigProblems, type KieConfig } from '#/config/kie'
 import { audit, readJson, requireAdmin } from './http'
 import { paymentProviderProblems } from './runtime-config'
 import type { AppContext, UserRow } from './types'
@@ -10,6 +11,9 @@ import { ApiError, nowIso } from './util'
 // 没有存值、存值不合法或字段已删除时用 site.ts 的默认值；保存的值等于默认值时删掉那一行，以后改 site.ts 仍然生效。
 
 export type RuntimeSettings = {
+  kieModel: string
+  kieResolution: string
+  kieCostCentsPerSecond: number
   maintenance: boolean
   checkoutPaused: boolean
   paymentProvider: string
@@ -31,6 +35,17 @@ export type SettingField =
 const referralOn = site.referralRewardCredits > 0
 
 export const SETTING_FIELDS: readonly SettingField[] = [
+  {
+    key: 'kieModel', kind: 'select', label: 'KIE 视频玩法',
+    help: '部署 VIDEO_PROVIDER=kie 时生效。只影响新任务；参考视频仍在 site.ts 配置。Wan 不使用提示词，也不支持 yir 两步场景合成。',
+    options: Object.entries(KIE_RECIPES).map(([value, recipe]) => ({ value, label: recipe.label })),
+  },
+  {
+    key: 'kieResolution', kind: 'select', label: 'KIE 分辨率',
+    help: '动作迁移只支持 720p；人物替换支持 480p、580p、720p。换玩法或分辨率后重新核对成本和真实效果。',
+    options: ['480p', '580p', '720p'].map((value) => ({ value, label: value })),
+  },
+  { key: 'kieCostCentsPerSecond', kind: 'int', min: 0, max: 10000, label: 'KIE 每秒成本（美分）', help: '按当前报价向上取整，供成本估算；0 表示未确认，拒绝新生成。实际费用优先使用 KIE 返回的消耗积分。网站对用户扣多少积分仍由 site.durations 决定。' },
   {
     key: 'maintenance',
     kind: 'bool',
@@ -87,6 +102,9 @@ export const SETTING_FIELDS: readonly SettingField[] = [
 ]
 
 export const DEFAULT_SETTINGS: RuntimeSettings = {
+  kieModel: site.video.kie.model,
+  kieResolution: site.video.kie.resolution,
+  kieCostCentsPerSecond: site.video.kie.costCentsPerSecond,
   maintenance: false,
   checkoutPaused: false,
   paymentProvider: '',
@@ -99,6 +117,10 @@ export const DEFAULT_SETTINGS: RuntimeSettings = {
 
 const CACHE_KEY = 'settings:v1'
 const fieldOf = (key: string) => SETTING_FIELDS.find((f) => f.key === key)
+
+export function kieConfigFor(settings: RuntimeSettings): KieConfig {
+  return { model: settings.kieModel, resolution: settings.kieResolution, costCentsPerSecond: settings.kieCostCentsPerSecond, creditPriceCents: site.video.kie.creditPriceCents }
+}
 
 function isValid(field: SettingField, value: unknown) {
   if (field.kind === 'bool') return typeof value === 'boolean'
@@ -238,6 +260,12 @@ export function registerSettingsAdminRoutes(routes: Hono<AppContext>) {
     }
     const db = c.env.DB
     const before = mergeSettings(await loadStored(db))
+    if (['kieModel', 'kieResolution', 'kieCostCentsPerSecond'].some((key) => key in patch)) {
+      const config = kieConfigFor({ ...before, ...patch })
+      // 成本 0 允许保存，用于主动关闭 KIE 生成；仍验证玩法与分辨率的组合。
+      const problems = kieConfigProblems({ ...config, costCentsPerSecond: config.costCentsPerSecond || 1 })
+      if (problems.length) throw new ApiError(400, 'invalid_setting', problems.join('；'))
+    }
     const now = nowIso()
     const changes: Record<string, { from: unknown; to: unknown }> = {}
     const statements: D1PreparedStatement[] = []

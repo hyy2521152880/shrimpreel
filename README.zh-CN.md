@@ -21,7 +21,11 @@ https://github.com/user-attachments/assets/895aab94-d0c9-474e-8d90-61a6c551e536
 - 前端/SSR：TanStack Start（React 19）+ Tailwind 4，`/` 英文、`/zh` 中文
 - API：Hono（`/api/*`、`/media/*`、`/sitemap.xml`、`/robots.txt`、`/llms.txt`、IndexNow key 文件），入口 `src/server.ts`
 - 支付：Waffo Pancake（默认）、Dodo Payments，均为 MoR；也可用 Stripe（你自己是商户，销售税自己处理）；`mock` 仅用于本地和 e2e
-- 视频：fal.ai queue API（默认），可选 [yir.ai](https://yir.ai/?ref=qianshuixia) 网关或 [NanoAPI](https://nanoapi.ai)；`mock` 仅用于本地和 e2e。见下文“视频服务商”
+- 视频：fal.ai queue API、[KIE](https://kie.ai)、[yir.ai](https://yir.ai/?ref=qianshuixia) 网关或 [NanoAPI](https://nanoapi.ai)；`mock` 仅用于本地和 e2e，新站初始化默认 KIE。见下文“视频服务商”
+
+用作视频新词站母模板时，先看 [KIE 快速启动](docs/fast-launch-kie.md)。`npm run site:new -- --keyword "Moon Hop" --domain moonhop.ai` 预览新站配置；在干净克隆中加 `--write` 写入。脚本会清空旧账号与资源 ID、OAuth、统计、支付商品及域名路由；存在本地凭据文件时拒绝写入。每站仍需独立资源、凭据、内容和真实成片验收。
+
+KIE 已适配 `wan/2-2-animate-replace` 人物替换和 `wan/2-2-animate-move` 动作迁移，输入为照片 + 参考视频。部署选择 `VIDEO_PROVIDER=kie` 并配置独立 `KIE_API_KEY`；在 `/admin/settings` 设置玩法、分辨率和每秒成本，默认值在 `site.video.kie`。成本为 0 时拒绝新生成。任务保存配置快照；提交结果不确定时不自动重投，回调查证归属后可恢复任务 ID，否则按既有超时流程退用户积分。进程环境有 Key 后运行 `npm run kie:check` 只读核对目录、参数、报价和余额，不提交生成。本地测试不代表真实模型效果或生产验收。
 - 已具备：
   - 用户与积分：Google 登录（含 One Tap）、积分包、月付和年付订阅、积分流水、个人中心（视频/账单/设置/兑换码/邀请链接/注销/导出我的数据）；账单显示实付与退款，订单和积分流水可分页加载，每笔订单有可打印的详情页（税务发票由支付商出具）
   - 订单与生成：订单与部分/全额退款回收、生成任务队列（含死信队列）与失败退积分
@@ -136,7 +140,7 @@ npx wrangler r2 object put <name>-media/templates/<file>.mp4 --file seed/templat
 ```
 
 - `ratelimits[].namespace_id` 在同一账号内要唯一，多个站点不要共用同一组数字。
-- 密钥：`SESSION_SECRET`、`GOOGLE_CLIENT_SECRET`、`WAFFO_MERCHANT_ID`、`WAFFO_PRIVATE_KEY`、`DODO_API_KEY`、`DODO_WEBHOOK_SECRET`、`FAL_KEY`；用 Stripe 时是 `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`；按需加 `YIR_API_KEY`（`VIDEO_PROVIDER=yir`）、`NANOAPI_API_KEY`（`VIDEO_PROVIDER=nanoapi`）、`OPENAI_API_KEY`（图片审核）、`TURNSTILE_SECRET_KEY`。可以逐个 `npx wrangler secret put <NAME>`，也可以用 `scripts/sync-secrets.mjs` 一次同步：
+- 密钥：`SESSION_SECRET`、`GOOGLE_CLIENT_SECRET`、`WAFFO_MERCHANT_ID`、`WAFFO_PRIVATE_KEY`、`DODO_API_KEY`、`DODO_WEBHOOK_SECRET`、`FAL_KEY`；用 Stripe 时是 `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`；按需加 `KIE_API_KEY`（`VIDEO_PROVIDER=kie`）、`YIR_API_KEY`（`VIDEO_PROVIDER=yir`）、`NANOAPI_API_KEY`（`VIDEO_PROVIDER=nanoapi`）、`OPENAI_API_KEY`（图片审核）、`TURNSTILE_SECRET_KEY`。可以逐个 `npx wrangler secret put <NAME>`，也可以用 `scripts/sync-secrets.mjs` 一次同步：
   ```bash
   cp .dev.vars.example .dev.vars.production     # 填上线用的值；.dev.vars.* 已被 .gitignore 忽略
   node scripts/sync-secrets.mjs                 # 只出计划：新增、已存在、只在远端、同步后仍缺，不打印任何值
@@ -205,6 +209,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
 | fal.ai | 代码自动带上 | `https://<domain>/api/webhooks/fal` |
 | yir.ai | 代码自动带上（只有 https 地址才带，本地开发靠轮询） | `https://<domain>/api/webhooks/yir` |
 | NanoAPI | 代码自动带上（只有 https 地址才带，本地开发靠轮询） | `https://<domain>/api/webhooks/nanoapi` |
+| KIE | 代码自动携带任务 token；结果与恢复归属通过 KIE 接口再次核对 | `https://<domain>/api/webhooks/kie` |
 
 - **Waffo**：`WAFFO_ENVIRONMENT` 为 `test` 或 `prod`。webhook 用 Waffo 公开的 RSA 公钥验签（已内置在 `src/server/payments/waffo.ts`），无需另配密钥。`WAFFO_PRIVATE_KEY` 支持 PKCS1/PKCS8，可以写成单行带 `\n` 的形式。
   - 退款是异步的：后台发起后只拿到工单号 `TKT_`，PSP 处理完才生成 `REF_` 并推送 `refund.succeeded`，test 模式实测要等 12–22 分钟。积分在 webhook 到达时才回收。
@@ -272,7 +277,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
   - fal 按帧计费，16 帧算 1 个视频秒，480p 为 $0.04/视频秒（[价格](https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace)）。模板源视频是 24fps，所以成片每秒 6 美分，18 秒约 $1.08。换模型、分辨率或源视频帧率时更新 `costCentsPerVideoSecond` 和 `sourceFps`。
   - 出片后才被判失败的任务（超时、管理员判失败）照样记成本；没出片的失败任务不记。mock 记 0。
   - 后台概览显示近 30 天的服务商成本、消耗积分折算的收入和估算毛利；生成列表逐条显示成本和毛利。每积分实收 = USD 已支付订单的净实收 ÷ 未回收的积分。实际扣费以服务商账单为准。
-- **视频服务商**：`VIDEO_PROVIDER` 可选 `fal`（默认）、`yir`、`nanoapi` 或 `mock`。[yir.ai](https://yir.ai/?ref=qianshuixia) 是图片视频 API 网关，启用方法：`VIDEO_PROVIDER=yir`，secret 写 `YIR_API_KEY`，模型和提示词在 `site.video.yir` 里改（`src/server/video/yir.ts`）。
+- **视频服务商**：`VIDEO_PROVIDER` 可选 `kie`、`fal`、`yir`、`nanoapi` 或 `mock`（新站初始化默认 KIE，见上方快速启动说明）。[yir.ai](https://yir.ai/?ref=qianshuixia) 是图片视频 API 网关，启用方法：`VIDEO_PROVIDER=yir`，secret 写 `YIR_API_KEY`，模型和提示词在 `site.video.yir` 里改（`src/server/video/yir.ts`）。
   - yir 没有模板所用的角色替换模型（`wan/v2.2-14b/animate/replace`）。接入用的是 Kling 2.6 Motion Control（reference 模式：照片 + 模板源视频），模板只交付接入代码，没有用真实 key 实测（提交、状态查询和错误映射由单元测试覆盖），效果和单价要自己验证，`costCentsPerSecond: 7` 只是估算，上线前按 [yir 模型页](https://yir.ai/models) 的报价改。
   - 两步走（可选，按风格配 `site.styles[].scene = { frame, prompt }`，默认 `null`；图片模型等共用参数在 `site.video.yir.sceneImage`）：Motion Control 的成片背景取自用户照片。想保留源视频的场景，就先用图片模型（如 `google/nano-banana-2`）把照片里的人合成进源视频首帧，再拿合成图做动作参考。首帧图放在 `seed/templates/`，和源视频一样上传到 R2 的 `templates/`（`--content-type image/jpeg`）。合成图会传进 yir Files API，第二步用固定的 `file_id` 引用，重新提交时请求体不变。每单多一张图的费用（`sceneImage.costCents`），用户照片也会经过图片模型的渠道。
   - 提交时用任务 id 作 `Idempotency-Key`：队列重投或 Worker 中断后重新提交，拿回的是同一个 yir 任务，不会重复计费。yir 按请求体识别同一请求，所以照片签名地址按任务创建时间生成，有效期 2 小时，重新提交时地址不变。

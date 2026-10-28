@@ -26,7 +26,7 @@
 | `DODO_PRODUCTS` | 同上 | 用 Dodo 时 | `scripts/dodo-setup.mjs` 可以生成 |
 | `STRIPE_ENVIRONMENT` | `test`、`live` | 用 Stripe 时 | webhook 里的 `livemode` 和它不一致时拒收；上线检查核对 `STRIPE_SECRET_KEY` 的前缀（`sk_test_` / `sk_live_`） |
 | `STRIPE_PRODUCTS` | JSON，值是 Price ID，如 `{"starter":"price_xxx"}` | 用 Stripe 时 | 积分包用一次性价格，订阅套餐用 recurring 价格。`scripts/stripe-setup.mjs` 可以生成 |
-| `VIDEO_PROVIDER` | `fal`、`yir`、`nanoapi`、`mock` | 是 | 模型和单价在 `site.video` 里配置，yir 的配置在 `site.video.yir`，NanoAPI 的在 `site.video.nanoapi` |
+| `VIDEO_PROVIDER` | `kie`、`fal`、`yir`、`nanoapi`、`mock` | 是 | 模型和单价在 `site.video` 里配置。KIE 默认值在 `site.video.kie`，后台可覆盖玩法、分辨率和每秒成本，仅影响新任务 |
 | `MODERATION_PROVIDER` | `openai`、`none`、`mock` | 是 | 上传图片的审核方式。`none` 不审核，检查时给出警告 |
 | `GOOGLE_CLIENT_ID` | OAuth Client ID | 是 | 站点只有 Google 登录，留空就没人能登录 |
 | `UMAMI_ORIGIN` | 不带路径的 https 地址，如 `https://umami.example.com` | 否 | Umami 实例地址，留空则不代理。只在 Worker 端使用（`/s/script.js`、`/s/api/send` 同域代理），不进前端，页面源码里看不到实例域名；格式不对时检查给出警告。实例要带 GeoLite2 数据库（Vercel 上部署时设 `BUILD_GEO=1` 再重新部署）：代理把访客 IP 放进 `payload.ip`，Umami 据此查国家，没有数据库会返回 500。只有 `APP_ENV=production` 才转发上报和取脚本（其它环境 `/s/script.js` 返回空 JS），`/admin` 页面不转发 |
@@ -44,6 +44,7 @@
 | `DODO_API_KEY`、`DODO_WEBHOOK_SECRET` | `PAYMENT_PROVIDER=dodo` | API 密钥需要的权限见 README 的“第三方回调地址”；卖订阅还要 Subscriptions 读写和 Customers 写入，见 [subscriptions.md](subscriptions.md) |
 | `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET` | `PAYMENT_PROVIDER=stripe` | secret key（`sk_`）或受限 Key（`rk_`，权限见 [payments.md](payments.md) 的“Stripe”）；webhook 密钥是端点的 `whsec_...`。可选 secret，类型声明在 `src/env.d.ts` |
 | `FAL_KEY` | `VIDEO_PROVIDER=fal` | |
+| `KIE_API_KEY` | `VIDEO_PROVIDER=kie` | 每站独立密钥，类型在 `src/env.d.ts`；缺 Key 或成本为 0 时生成在扣积分前被拒绝。后台连接测试只核对配置、鉴权和余额，不生成视频 |
 | `YIR_API_KEY` | `VIDEO_PROVIDER=yir` | 可选 secret，类型声明在 `src/env.d.ts`。建议在 yir Console 给这个 Key 设月度额度，见 README 的“视频服务商” |
 | `NANOAPI_API_KEY` | `VIDEO_PROVIDER=nanoapi` | 可选 secret，类型声明在 `src/env.d.ts`。NanoAPI 没有月度额度，余额用完提交会返回 402，见 README 的“视频服务商” |
 | `OPENAI_API_KEY` | `MODERATION_PROVIDER=openai` | 可选 secret，类型声明在 `src/env.d.ts` |
@@ -59,6 +60,7 @@
 - `packages`：积分包。`id` 要在 `*_PRODUCTS` 里有对应的商品，页面上的价格要和支付商后台一致。
 - `subscriptionsEnabled`、`plans`：订阅开关和套餐（`interval` 为 `month` 或 `year`，`credits` 是每月发放量）。套餐同样要在 `*_PRODUCTS` 里有商品；不卖订阅时把开关设为 `false`。用法见 [subscriptions.md](subscriptions.md)，入账规则见 [payments.md](payments.md) 的“订阅”。
 - `video`：模型、源视频帧率和每视频秒的成本，用于估算毛利。
+- `video.kie`：仅适配 Wan 人物替换和动作迁移；`creditPriceCents` 是每个 KIE 积分的采购成本（美分），与本站用户积分无关。模型、分辨率、每秒成本和换算率随任务保存；后台改价不改变旧任务。重新部署前同步默认值供 doctor 检查，详见 [KIE 快速启动](fast-launch-kie.md)。
 - `analytics.ga4Id`、`analytics.cfBeaconToken`、`analytics.umamiWebsiteId`：统计。`umamiWebsiteId` 配合 `UMAMI_ORIGIN` 使用，同域代理、不写 Cookie、不受横幅控制。只有填了 `ga4Id` 才会显示 Cookie 同意横幅，此时归因 Cookie `vt_attr` 也等访客同意后才写入。
 - `share.enabled`：成片公开分享页，默认开启。换脸、真人类站点风险高时设为 `false`，个人中心的分享按钮和 `/v/<id>` 页面都不出现。
 - `seo.googleVerification`、`seo.bingVerification`、`seo.indexNowKey`：站长验证和 IndexNow。用 `new-site.mjs` 派生新站时会被清空。

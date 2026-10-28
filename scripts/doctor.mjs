@@ -9,11 +9,12 @@
 //
 // 规则与后台概览的“配置检查”卡片共用 src/server/config-health.ts。
 import { spawnSync } from 'node:child_process'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
 import { sellingPlans, site } from '../src/config/site.ts'
 import { checkConfig } from '../src/server/config-health.ts'
+import { kieConfigProblems, kieRecipe } from '../src/config/kie.ts'
 
 export function readWranglerConfig(file) {
   const { config, error } = ts.parseConfigFileTextToJson(file, readFileSync(file, 'utf8'))
@@ -83,6 +84,18 @@ export function runDoctor(
     planIds,
     siteDomain,
   })
+  if (vars.VIDEO_PROVIDER === 'kie') {
+    for (const message of kieConfigProblems(site.video.kie)) issues.push({ level: 'error', key: 'site.video.kie', message })
+    const recipe = kieRecipe(site.video.kie.model)
+    for (const style of site.styles) {
+      if (style.scene) issues.push({ level: 'error', key: `styles.${style.id}`, message: 'KIE Wan 不支持 yir 两步场景合成，请选择兼容玩法' })
+      if (recipe) for (const source of Object.values(style.sources)) {
+        const file = `seed/templates/${source}`
+        if (!existsSync(file)) issues.push({ level: 'error', key: file, message: '缺少生成所需的参考视频' })
+        else if (statSync(file).size > recipe.videoMaxBytes) issues.push({ level: 'error', key: file, message: `参考视频超过当前 KIE 玩法的 ${recipe.videoMaxBytes / 1_000_000} MB 上限` })
+      }
+    }
+  }
   const error = (key, message) => issues.push({ level: 'error', key, message })
   const warn = (key, message) => issues.push({ level: 'warn', key, message })
 

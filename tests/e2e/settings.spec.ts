@@ -43,6 +43,25 @@ test.afterAll(async () => {
   await admin.dispose()
 })
 
+test('KIE 玩法配置：拒绝不兼容分辨率，保存后刷新保留', async ({ page }, testInfo) => {
+  const bad = await json<{ error: string; message: string }>(post(admin, '/api/admin/settings', { values: { kieModel: 'wan/2-2-animate-move', kieResolution: '480p' } }), 400)
+  expect(bad.error).toBe('invalid_setting')
+  expect(bad.message).toContain('720p')
+  await devLogin(page.request, ADMIN_EMAIL)
+  await page.goto('/admin/settings')
+  await page.getByTestId('setting-kieModel').selectOption('wan/2-2-animate-move')
+  await page.getByTestId('setting-kieResolution').selectOption('720p')
+  await page.getByTestId('setting-kieCostCentsPerSecond').fill('12')
+  page.once('dialog', (dialog) => void dialog.accept())
+  await page.getByTestId('settings-save').click()
+  await expect(page.getByTestId('settings-message')).toContainText('已保存')
+  await page.reload()
+  await expect(page.getByTestId('setting-kieModel')).toHaveValue('wan/2-2-animate-move')
+  await expect(page.getByTestId('setting-kieResolution')).toHaveValue('720p')
+  await expect(page.getByTestId('setting-kieCostCentsPerSecond')).toHaveValue('12')
+  await page.screenshot({ path: testInfo.outputPath('kie-admin-settings.png'), fullPage: true })
+})
+
 test('运营设置只有管理员能读写；未知参数、越界值整体拒绝；未知探测目标 404', async ({ request }) => {
   expect((await request.get('/api/admin/settings')).status()).toBe(401)
   await devLogin(request, uniqueEmail('normal'))

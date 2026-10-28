@@ -1,6 +1,8 @@
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { handleVideoJob } from '#/server/jobs'
+import { handleVideoJob, runScheduledMaintenance } from '#/server/jobs'
+import { defaultStyle, site } from '#/config/site'
+import { KieSubmissionUnknown } from '#/server/video/kie'
 import { getVideoProvider } from '#/server/video'
 import type { VideoStatus } from '#/server/video/types'
 import { d1Shim, migrate } from './d1-sqlite'
@@ -9,6 +11,9 @@ import { d1Shim, migrate } from './d1-sqlite'
 const status = vi.fn<(requestId: string, meta: Record<string, unknown>) => Promise<VideoStatus>>()
 vi.mock('#/server/video', () => ({ getVideoProvider: vi.fn(() => ({ id: 'yir', status, costCents: () => 0 })) }))
 vi.mock('#/server/notifications', () => ({ notifyGenerationFinished: async () => {} }))
+vi.mock('#/server/subscriptions', () => ({ grantDueSubscriptions: async () => ({ checked: 0 }) }))
+vi.mock('#/server/retention', () => ({ sweepExpiredMedia: async () => ({ uploads: 0, outputs: 0 }) }))
+vi.mock('#/server/reconcile', () => ({ reconcilePendingOrders: async () => ({ checked: 0 }) }))
 
 let sqlite: DatabaseSync
 let sent: unknown[]
@@ -28,6 +33,7 @@ beforeEach(() => {
     )
     .run(JSON.stringify({ stage: 'scene' }), now, now)
   status.mockReset()
+  vi.mocked(getVideoProvider).mockReset().mockReturnValue({ id: 'yir', submit: vi.fn(), status, costCents: () => 0 })
 })
 
 const row = () => sqlite.prepare('SELECT status, provider_request_id, provider_meta FROM generations WHERE id = ?').get('gen_1')
@@ -65,5 +71,48 @@ describe('jobs：提交时按任务的风格找源视频', () => {
     await handleVideoJob(env, { kind: 'submit', generationId: 'gen_1' })
     expect(submit).not.toHaveBeenCalled()
     expect(sqlite.prepare('SELECT status, error_code FROM generations WHERE id = ?').get('gen_1')).toEqual({ status: 'failed', error_code: 'invalid_input' })
+  })
+})
+
+describe('KIE 提交不重复计费', () => {
+  function setup() {
+    const now = new Date(Date.now() - 6 * 60_000).toISOString()
+    sqlite.prepare(`UPDATE generations SET status = 'queued', template_id = ?, duration_id = ?, provider = 'kie', provider_request_id = NULL, created_at = ?, updated_at = ? WHERE id = 'gen_1'`)
+      .run(defaultStyle.id, site.durations[0]!.id, now, now)
+    sqlite.prepare("INSERT INTO uploads (id, user_id, r2_key, content_type, size_bytes, sha256, created_at) VALUES ('upl_1', 'usr_1', 'k', 'image/jpeg', 1, 'h', ?)").run(now)
+    env.SITE_URL = 'https://site.test'
+    env.SESSION_SECRET = 'local-testing-only-32-characters-minimum'
+    env.APP_ENV = 'production'
+  }
+  it('提交结果未知：重复消息和 Cron 都不再次提交；超时只退一次积分', async () => {
+    setup()
+    const submit = vi.fn(async () => { throw new KieSubmissionUnknown() })
+    vi.mocked(getVideoProvider).mockReturnValueOnce({ id: 'kie', submit, status, costCents: () => 0 })
+    await handleVideoJob(env, { kind: 'submit', generationId: 'gen_1' })
+    await handleVideoJob(env, { kind: 'submit', generationId: 'gen_1' })
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(row()).toMatchObject({ status: 'processing', provider_request_id: null })
+    sqlite.prepare("UPDATE generations SET updated_at = ? WHERE id = 'gen_1'").run(new Date(Date.now() - 6 * 60_000).toISOString())
+    await runScheduledMaintenance(env)
+    expect(sent).toEqual([])
+    expect(row()).toMatchObject({ status: 'processing' })
+    const old = new Date(Date.now() - 46 * 60_000).toISOString()
+    sqlite.prepare("UPDATE generations SET created_at = ?, updated_at = ? WHERE id = 'gen_1'").run(old, old)
+    await runScheduledMaintenance(env)
+    await runScheduledMaintenance(env)
+    expect(row()).toMatchObject({ status: 'failed' })
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE idempotency_key = 'generation_refund:gen_1'").get()).toEqual({ n: 1 })
+  })
+  it('成功提交后排轮询失败：保留 taskId，Cron 只补轮询，不重新生成', async () => {
+    setup()
+    const submit = vi.fn(async () => ({ requestId: 'kie_task_1', meta: {} }))
+    vi.mocked(getVideoProvider).mockReturnValueOnce({ id: 'kie', submit, status, costCents: () => 0 })
+    env.VIDEO_QUEUE.send = vi.fn().mockRejectedValueOnce(new Error('queue unavailable')).mockImplementation(async (message) => { sent.push(message) })
+    await handleVideoJob(env, { kind: 'submit', generationId: 'gen_1' })
+    expect(row()).toMatchObject({ status: 'processing', provider_request_id: 'kie_task_1' })
+    sqlite.prepare("UPDATE generations SET updated_at = ? WHERE id = 'gen_1'").run(new Date(Date.now() - 6 * 60_000).toISOString())
+    await runScheduledMaintenance(env)
+    expect(sent).toEqual([{ kind: 'poll', generationId: 'gen_1' }])
+    expect(submit).toHaveBeenCalledTimes(1)
   })
 })

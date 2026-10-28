@@ -9,8 +9,10 @@
 //       --name（Worker 与 D1/R2/Queue 前缀，默认 slug）--email（默认 support@<domain>）
 //       --platform（默认不变）--date（站点与文章的 publishedAt/updatedAt，默认今天）
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { site } from '../src/config/site.ts'
+import { kieConfigProblems, kieRecipe } from '../src/config/kie.ts'
+import { resetLaunchConfig } from './launch-config.mjs'
 
 const args = process.argv.slice(2)
 const arg = (name, fallback) => {
@@ -18,6 +20,18 @@ const arg = (name, fallback) => {
   return index >= 0 && args[index + 1] && !args[index + 1].startsWith('--') ? args[index + 1] : fallback
 }
 const write = args.includes('--write')
+const payment = arg('payment-provider', 'stripe')
+const video = arg('video-provider', 'kie')
+const kieModel = arg('kie-model', 'wan/2-2-animate-replace')
+const recipe = kieRecipe(kieModel)
+if (!recipe) throw new Error('kie-model 尚未适配，请先查看 src/config/kie.ts')
+const kieResolution = arg('resolution', recipe.resolutions[0])
+const kieCost = Number(arg('cost-cents-per-second', '0'))
+const configProblems = kieConfigProblems({ model: kieModel, resolution: kieResolution, costCentsPerSecond: kieCost || 1, creditPriceCents: site.video.kie.creditPriceCents })
+if (!Number.isInteger(kieCost) || kieCost < 0 || kieCost > 10000 || configProblems.length) throw new Error(configProblems.join('；') || 'cost-cents-per-second 必须是 0–10000 的整数')
+if (write && readdirSync('.').some((file) => /^(?:\.dev\.vars|\.env)(?:\..+)?$/.test(file) && !['.dev.vars.example', '.env.example'].includes(file))) {
+  throw new Error('检测到本地凭据文件。请从干净 Git 克隆派生新站，不能复制旧站凭据；文件未修改。')
+}
 
 const keyword = arg('keyword')?.trim()
 const domain = arg('domain')
@@ -79,6 +93,8 @@ function replaceOnce(source, file, label, pattern, replacement) {
 // ---------- src/config/site.ts ----------
 const siteFile = 'src/config/site.ts'
 let siteSrc = readFileSync(siteFile, 'utf8')
+siteSrc = replaceOnce(siteSrc, siteFile, 'KIE 玩法与成本', /kie: \{[\s\S]*?\n    \}/,
+  `kie: {\n      model: ${q(kieModel)} as string,\n      resolution: ${q(kieResolution)} as string,\n      costCentsPerSecond: ${kieCost} as number,\n      creditPriceCents: ${site.video.kie.creditPriceCents} as number,\n    }`)
 const topLevel = { keyword, brandName: brand, logoMark: logo, domain, supportEmail: email, trendPlatform: platform }
 for (const [key, value] of Object.entries(topLevel)) {
   siteSrc = replaceOnce(siteSrc, siteFile, `${key} = ${value}`, new RegExp(`(\\n  ${key}: )'(?:[^'\\\\]|\\\\.)*'`), `$1${q(value)}`)
@@ -148,6 +164,8 @@ wrangler = wrangler.replace(/"namespace_id": "\d+"/g, () => `"namespace_id": "${
 if (wrangler !== beforeLimiters) changes.push(`${wranglerFile}  ${limiter} 个 ratelimit namespace_id → ${base + 1}–${base + limiter}`)
 // 交易邮件发件地址用新站域名（域名还要在 Email Service 完成 Onboard，见清单）
 wrangler = replaceOnce(wrangler, wranglerFile, `EMAIL_FROM = noreply@${domain}`, /("EMAIL_FROM": )"[^"]*"/, `$1"noreply@${domain}"`)
+wrangler = resetLaunchConfig(wrangler, { domain, name, payment, video, adminEmail: arg('admin-email', '') })
+changes.push(`${wranglerFile}  独立站路由、OAuth、统计、管理员和支付商品重置；VIDEO_PROVIDER=${video}，PAYMENT_PROVIDER=${payment}（测试模式）`)
 // 模板自身的 workers.dev 预发配置，资源名属于模板，新站点不能沿用
 const stagingFile = 'wrangler.staging.jsonc'
 const removeStaging = existsSync(stagingFile)
@@ -206,7 +224,9 @@ console.log(`
    密钥：除支付与视频密钥外，再 secret put OPENAI_API_KEY、TURNSTILE_SECRET_KEY。
    交易邮件：Dashboard → Compute > Email Service → Onboard Domain 添加 ${domain}（DNS 须托管在 Cloudflare）；
    发给任意收件人需 Workers Paid。EMAIL_FROM 已改为 noreply@${domain}；ADMIN_EMAILS 同时接收举报、留言提醒和系统告警。
-5. 支付商品：node scripts/waffo-setup.mjs --store STO_xxx --apply（先 test 店铺跑通再建 prod），把输出写进 WAFFO_PRODUCTS；webhook 指向 https://${domain}/api/webhooks/waffo。
+5. 支付商品：node scripts/${payment}-setup.mjs --apply（Waffo 另传 --store STO_xxx；先 test 跑通再建正式商品），把输出写进 ${payment.toUpperCase()}_PRODUCTS；webhook 指向 https://${domain}/api/webhooks/${payment}。
+   KIE：配置独立 KIE_API_KEY；node --env-file=.dev.vars.production scripts/check-kie.mjs 核对目录、schema 和报价（不生成、不扣费）。
+   /admin/settings 可调 KIE 玩法、分辨率和每秒成本；当前估算 ${kieCost} 美分/秒${kieCost === 0 ? '，尚未确认成本，生成会被拒绝' : ''}。
 6. 本地验证：npm run typecheck && npm test && npm run test:e2e && npm run seo:check；部署前 npm run doctor（npm run deploy 会先跑）
 7. 上线后：npm run seo:check -- --base https://${domain} --production；Search Console 与 Bing Webmaster 验证并提交 https://${domain}/sitemap.xml；
    如配置了 site.seo.indexNowKey：npm run seo:indexnow -- --submit`)

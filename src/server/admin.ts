@@ -14,7 +14,7 @@ import { registerRedeemAdminRoutes } from './redeem'
 import { registerReferralAdminRoutes } from './referrals'
 import { registerReportRoutes } from './reports'
 import { configIssues } from './runtime-config'
-import { getSettings, registerSettingsAdminRoutes } from './settings'
+import { getSettings, kieConfigFor, registerSettingsAdminRoutes } from './settings'
 import { removeReportedContent } from './takedown'
 import type { AppContext, GenerationRow, OrderRow, TakedownRow, UserRow } from './types'
 import { ApiError, createId, isCheckConstraintError, isUniqueConstraintError, nowIso } from './util'
@@ -103,7 +103,7 @@ adminRoutes.get('/stats', async (c) => {
     failedEmails: count(failedEmails!),
     generationCost30d: { videos: cost.videos, costCents: cost.cost_cents, creditsUsed: cost.credits },
     revenuePerCreditCents: perCredit(perCreditRow!),
-    config: configIssues(c.env, (await getSettings(c.env)).paymentProvider),
+    config: configIssues(c.env, (await getSettings(c.env)).paymentProvider, kieConfigFor(await getSettings(c.env))),
   })
 })
 

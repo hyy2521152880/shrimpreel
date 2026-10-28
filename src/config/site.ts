@@ -70,6 +70,14 @@ export const site = {
 
   // 视频模型，服务商由 VIDEO_PROVIDER 选择。换模型时同时检查 src/server/video/ 下对应文件的入参与出参。
   video: {
+    // KIE：首轮适配一张照片 + 参考视频。每秒成本必须按当前报价填写；0 会拒绝新任务。
+    kie: {
+      model: 'wan/2-2-animate-replace' as string,
+      resolution: '480p' as string,
+      costCentsPerSecond: 0 as number,
+      // 1 KIE credit 对应的美分；按自己的实际采购价调整。
+      creditPriceCents: 0.5 as number,
+    },
     // fal.ai queue API（默认）
     falModel: 'fal-ai/wan/v2.2-14b/animate/replace',
     resolution: '480p',

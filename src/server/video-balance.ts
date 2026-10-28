@@ -1,5 +1,6 @@
 import { cleanSecret } from './util'
 import { activeVideoProviderId } from './video'
+import { site } from '#/config/site'
 
 // 视频服务商余额查询：后台“测试连接”（probes.ts）和 Cron 的主动余额告警（alerts.ts）共用。
 // 只发一次只读 GET，不回显密钥；各种失败情形用 status 区分，由调用方决定怎么说。
@@ -28,6 +29,16 @@ function readBalance(provider: string, amount: unknown, currency: unknown): Bala
 export async function queryVideoBalance(env: Env): Promise<BalanceQuery> {
   const id = activeVideoProviderId(env)
   if (id === 'mock') return { status: 'mock' }
+  if (id === 'kie') {
+    const key = cleanSecret(env.KIE_API_KEY)
+    if (!key) return { status: 'no_key', keyName: 'KIE_API_KEY' }
+    const response = await fetch('https://api.kie.ai/api/v1/chat/credit', { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000), redirect: 'error' })
+    const body = await response.json().catch(() => null) as { code?: number; data?: unknown } | null
+    if (response.status === 401 || body?.code === 401) return { status: 'unauthorized', keyName: 'KIE_API_KEY' }
+    if (!response.ok || body?.code !== 200) return { status: 'http', code: body?.code ?? response.status }
+    if (typeof body.data !== 'number' || !Number.isFinite(body.data) || body.data < 0) return { status: 'unreadable' }
+    return readBalance('KIE', body.data * site.video.kie.creditPriceCents / 100, 'USD')
+  }
   if (id === 'fal') {
     const key = cleanSecret(env.FAL_KEY)
     if (!key) return { status: 'no_key', keyName: 'FAL_KEY' }

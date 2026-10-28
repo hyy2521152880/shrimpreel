@@ -5,7 +5,8 @@ import { emailConfig } from './email'
 import { audit, requireAdmin } from './http'
 import { getModerationProvider } from './moderation'
 import { activePaymentProviderId, getPaymentProvider } from './payments'
-import { getSettings } from './settings'
+import { getSettings, kieConfigFor } from './settings'
+import { kieConfigProblems } from '#/config/kie'
 import { dodoBaseUrl } from './payments/dodo'
 import { STRIPE_API_VERSION } from './payments/stripe'
 import { waffoEnvironment } from './payments/waffo'
@@ -175,6 +176,10 @@ function balanceOutcome(amount: number, currency: string, provider: string) {
 }
 
 async function probeVideo(env: Env): Promise<Outcome> {
+  if (env.VIDEO_PROVIDER === 'kie') {
+    const problems = kieConfigProblems(kieConfigFor(await getSettings(env)))
+    if (problems.length) return fail(problems.join('；'))
+  }
   const result = await queryVideoBalance(env)
   if (result.status === 'mock') return ok('mock 视频服务商，不调用外部接口')
   if (result.status === 'no_key') return fail(`${result.keyName} 未配置`)
