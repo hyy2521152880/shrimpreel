@@ -4,6 +4,7 @@
 
 ## 改动前
 
+- 新词站的标准入口是 [docs/keyword-to-launch.md](docs/keyword-to-launch.md)：先把有来源的搜索意图/资料整理为开发简报，再验证玩法、复用模板开发、可选 UI 改版、完成独立配置并按授权上线。默认保留现有 UI；用户明确要求改版时，必要的页面/组件/样式修改已在授权范围内，保留业务接口并记录共享文件差异供后续合并审阅。本文档的当前流程和用户当次要求优先于原有 new-hot-site Skill 的旧流程约定，不修改第三方 Skill 原文。
 - 本仓库是模板，热词站是以它为 `upstream` 的独立仓库。站点差异只放在 `src/config/site.ts`、`src/content/*`、`public/*`、`seed/`、`wrangler.jsonc` 和 `package.json` 的 `name`；其它文件的修复在模板里做，再合并到各站。
   - 这份清单还写在 `scripts/sync-plan.mjs` 的 `layerOf`（同步计划按它分层，`tests/unit/sync-plan.test.ts` 核对）和 new-hot-site skill 的白名单里，改动时三处一起改。
   - 站点只能用 `git merge` 同步模板（`sync-upstream` skill），同步基线取 `git merge-base`；合并提交带 `Template-sync: <sha>` trailer。

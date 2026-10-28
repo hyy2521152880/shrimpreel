@@ -6,6 +6,8 @@
 
 开源的“一张照片 → 跟拍某个爆款视频模板”AI 视频 SaaS 模板。每追一个新热词就建一个站：从本模板建仓库，改配置、文案和素材即可上线。全部跑在 Cloudflare 上：Workers + D1 + R2 + KV + Queues + Rate Limiting + Cron。
 
+**新词建站入口：[从新词到上线](docs/keyword-to-launch.md)**。包含可直接交给 ChatGPT 的调研任务、开发简报、模板开发任务，以及可选 UI 改造、后台/云平台配置和上线验收的统一流程。
+
 https://github.com/user-attachments/assets/895aab94-d0c9-474e-8d90-61a6c551e536
 
 72 秒功能介绍，无声（[英文版](README.md)；MP4 文件在 [docs/media](docs/media)）。画面来自本地运行，示例站 Neon Shuffle AI 和视频素材都是占位演示。

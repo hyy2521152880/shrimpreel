@@ -16,6 +16,8 @@ A 72-second tour, no sound ([Chinese version](README.zh-CN.md); MP4 files in [do
 
 [Christmas Dance AI](https://christmasdanceai.com/?utm_source=github&utm_medium=referral&utm_campaign=shrimpreel): upload one photo and dance as an elf in Santa's workshop, or at a Christmas party in your own outfit. Two styles, Google sign-in, credit packs and subscriptions, all from this template.
 
+**New keyword workflow: [Research to launch](docs/keyword-to-launch.md)** (Chinese). Includes a ChatGPT research prompt, a development brief and implementation prompt, optional UI changes, and the exact division between site admin settings, cloud configuration and launch acceptance.
+
 > Status: the full flow works locally (unit tests + Playwright e2e), and the site above runs it in production. The template itself is not deployed; [ROADMAP.md](ROADMAP.md) lists what has and hasn't been verified against real services. Code comments, ROADMAP and `docs/` are currently in Chinese.
 
 - Frontend/SSR: TanStack Start (React 19) + Tailwind 4. English at `/`, Chinese at `/zh`.
