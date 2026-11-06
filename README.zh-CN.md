@@ -97,7 +97,8 @@ npm run dev -- --host 127.0.0.1      # http://127.0.0.1:3000
 8. **上线后**：
    - 运行 `npm run seo:check -- --base https://<domain> --production`。
    - 在 Search Console 和 Bing Webmaster 验证站点，提交 `https://<domain>/sitemap.xml`。
-   - 配置了 `site.seo.indexNowKey` 时，运行 `npm run seo:indexnow -- --submit`。
+   - 正式站和 `site.seo.indexNowKey` 上线后，首次使用 `npm run seo:indexnow -- --all --submit`。后续 `npm run deploy` 在部署前记录公开内容，成功部署后只提交新增或内容变化的页面，打包文件名变化不触发提交。直接运行 `wrangler deploy` 不经过此流程；删除页面目前不在增量提交范围。首次部署尚无 sitemap 时直接用 Wrangler，上线验证 key 后再首次提交。
+   - 指定页面补推：`npm run seo:indexnow -- --url / --url /pricing --submit`，不加 `--submit` 仅预览。记录保留在 `.tmp/indexnow/`；后置提交失败按输出的 `--since ... --out ...` 命令补推，无需重新部署。同一输出记录中已受理的相同内容不会重复发送。HTTP 200/202 不等于 Bing 后台显示或已收录。
    - 用 Claude Code 时，`launch-audit` skill 会一次跑完这些检查和其余上线清单（见“部署到 Cloudflare”）。
 
 ### 合并模板更新

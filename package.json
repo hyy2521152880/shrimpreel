@@ -22,7 +22,7 @@
     "seed:local": "node scripts/seed-local.mjs",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "doctor": "node scripts/doctor.mjs",
-    "deploy": "npm run doctor && npm run build && wrangler deploy"
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.64.0",

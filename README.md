@@ -97,7 +97,8 @@ With Claude Code, once the site repo exists (step 1) you can just say "new hot s
 8. **After launch**
    - Run `npm run seo:check -- --base https://<domain> --production`.
    - Verify the site in Search Console and Bing Webmaster Tools and submit `https://<domain>/sitemap.xml`.
-   - If `site.seo.indexNowKey` is set, run `npm run seo:indexnow -- --submit`.
+   - Once the site and `site.seo.indexNowKey` are live, use `npm run seo:indexnow -- --all --submit` for the initial submission only. Later, `npm run deploy` captures public content before deployment and submits only new or changed pages after a successful deployment. Unchanged bundles do not trigger submission. Direct `wrangler deploy` bypasses this hook. Removed pages are not included in this incremental flow.
+   - To notify a specific update, use `npm run seo:indexnow -- --url / --url /pricing --submit`. Omit `--submit` to preview. Records are kept in `.tmp/indexnow/`; keep the printed `--since ... --out ...` command for retrying a failed post-deploy submission without redeploying. An accepted identical batch is skipped when rerun with the same output record. HTTP 200/202 is not proof of Bing dashboard visibility or indexing. A first deployment without an existing sitemap should use Wrangler directly, then submit once the key file is accessible.
    - With Claude Code, the `launch-audit` skill runs these checks and the remaining launch checklist in one go (see "Deploying to Cloudflare").
 
 ### Merging template updates into a site

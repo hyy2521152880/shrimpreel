@@ -208,4 +208,4 @@ console.log(`
 5. 支付商品：node scripts/waffo-setup.mjs --store STO_xxx --apply（先 test 店铺跑通再建 prod），把输出写进 WAFFO_PRODUCTS；webhook 指向 https://${domain}/api/webhooks/waffo。
 6. 本地验证：npm run typecheck && npm test && npm run test:e2e && npm run seo:check；部署前 npm run doctor（npm run deploy 会先跑）
 7. 上线后：npm run seo:check -- --base https://${domain} --production；Search Console 与 Bing Webmaster 验证并提交 https://${domain}/sitemap.xml；
-   如配置了 site.seo.indexNowKey：npm run seo:indexnow -- --submit`)
+   首次上线且配置了 site.seo.indexNowKey：npm run seo:indexnow -- --all --submit；后续 npm run deploy 自动只推变化页`)
