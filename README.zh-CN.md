@@ -1,5 +1,7 @@
 # ShrimpReel（虾片）
 
+IndexNow 通知直接发送到 Bing 官方端点 `https://www.bing.com/indexnow`。接口受理、Bing 报表可见及收录分别验收。Cloudflare Crawler Hints 可补充自动通知，不替代按变化页面直推。
+
 [English](README.md) | 简体中文
 
 作者：[浅水虾](https://x.com/qianshuixia2026)，一只朝着深海出发的浅水虾。

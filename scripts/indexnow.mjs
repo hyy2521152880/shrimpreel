@@ -74,7 +74,8 @@ export async function submitUrls(origin, key, urls, fetcher = fetch) {
   const keyLocation = `${origin}/${key}.txt`
   const keyFile = await fetcher(keyLocation, { redirect: 'manual', signal: AbortSignal.timeout(30000) })
   if (keyFile.status !== 200 || (await keyFile.text()).trim() !== key) throw new Error('IndexNow 验证文件不可访问或内容不符')
-  const response = await fetcher('https://api.indexnow.org/indexnow', {
+  // 直接通知主要验收目标 Bing；IndexNow 参与引擎按协议共享通知。
+  const response = await fetcher('https://www.bing.com/indexnow', {
     method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, signal: AbortSignal.timeout(30000),
     body: JSON.stringify({ host: new URL(origin).host, key, keyLocation, urlList: urls }),
   })

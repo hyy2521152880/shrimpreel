@@ -38,6 +38,7 @@ describe('IndexNow 增量提交', () => {
     if ([200, 202].includes(status)) expect((await result).status).toBe(status)
     else await expect(result).rejects.toThrow(`HTTP ${status}`)
     expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(fetcher.mock.calls[1]![0]).toBe('https://www.bing.com/indexnow')
     const payload = JSON.parse(fetcher.mock.calls[1]![1]!.body as string)
     expect(payload).toEqual({ host: 'example.org', key, keyLocation: `${origin}/${key}.txt`, urlList: [origin + '/'] })
   })

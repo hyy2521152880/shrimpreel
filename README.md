@@ -1,5 +1,7 @@
 # ShrimpReel
 
+IndexNow notifications go directly to Bing's official `https://www.bing.com/indexnow` endpoint. HTTP acceptance, Bing report visibility, and indexing are separate checks. Cloudflare Crawler Hints can supplement this flow but does not replace targeted notifications.
+
 English | [简体中文](README.zh-CN.md)
 
 Built by [浅水虾 (qianshuixia)](https://x.com/qianshuixia2026).
